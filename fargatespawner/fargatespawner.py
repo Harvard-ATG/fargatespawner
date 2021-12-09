@@ -195,7 +195,7 @@ class FargateSpawner(Spawner):
     async def start(self):
         progress_buffer = self.progress_buffer
 
-        self.log.debug('Starting spawner')
+        self.log.debug('Starting spawner with timeout {}'.format(self.start_timeout))
 
         progress_buffer.write({'progress': 0.5, 'message': 'Starting server...'})
         try:
@@ -210,7 +210,7 @@ class FargateSpawner(Spawner):
         self.task_arn = task_arn
         self.task_cluster_arn = task_cluster_arn
 
-        max_polls = 50
+        max_polls = self.start_timeout
         num_polls = 0
         task_ip = ''
         while task_ip == '':
@@ -220,12 +220,8 @@ class FargateSpawner(Spawner):
 
             task_ip = await _get_task_ip(self.log, self._aws_endpoint(), task_cluster_arn, task_arn)
             await gen.sleep(1)
-            progress_buffer.write({'progress': 1 + num_polls / max_polls})
+            progress_buffer.write({'progress': 1 + num_polls / max_polls * 99})
 
-        progress_buffer.write({'progress': 2})
-
-        max_polls = self.start_timeout
-        num_polls = 0
         status = ''
         while status != 'RUNNING':
             num_polls += 1
@@ -237,7 +233,7 @@ class FargateSpawner(Spawner):
                 raise Exception('Task {} is {}'.format(task_arn, status))
 
             await gen.sleep(1)
-            progress_buffer.write({'progress': 2 + num_polls / max_polls * 98})
+            progress_buffer.write({'progress': 1 + num_polls / max_polls * 99})
 
         progress_buffer.write({'progress': 100, 'message': 'Server started'})
         await gen.sleep(1)
