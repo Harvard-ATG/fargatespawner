@@ -192,11 +192,18 @@ class FargateSpawner(Spawner):
             None if (await _get_task_status(self.log, self._aws_endpoint(), self.task_cluster_arn, self.task_arn)) in ALLOWED_STATUSES else \
             1
 
+    def run_pre_spawn_hook(self):
+        # Explicitly set the expected protocol and port on the server
+        # otherwise it defaults to a random port
+        self.server.port = self.notebook_port
+        self.server.proto = self.notebook_scheme
+        self.log.debug(f'Prespawn {self.user.name} server {self.server}')
+        super().run_pre_spawn_hook()
+
     async def start(self):
+        self.log.debug(f'Starting {self.user.name} with timeout {self.start_timeout}')
+
         progress_buffer = self.progress_buffer
-
-        self.log.debug(f'Starting spawner for user {self.user.name} with timeout {self.start_timeout}')
-
         progress_buffer.write({'progress': 0.5, 'message': 'Starting server...'})
         try:
             self.calling_run_task = True
@@ -241,7 +248,7 @@ class FargateSpawner(Spawner):
         progress_buffer.close()
         
         server_url = f'{self.notebook_scheme}://{task_ip}:{self.notebook_port}'
-        self.log.debug(f"Started notebook for user {self.user.name} at url: {server_url}")
+        self.log.debug(f"Started {self.user.name} at server: {server_url}")
 
         return server_url
 
