@@ -140,8 +140,8 @@ class FargateSpawner(Spawner):
 
     get_run_task_args = Callable(config=True)
 
-    notebook_port = Int(config=True)
-    notebook_scheme = Unicode(config=True)
+    notebook_port = Int(8888, config=True)
+    notebook_scheme = Unicode('http', config=True)
 
     authentication_class = Type(FargateSpawnerAuthentication, config=True)
     authentication = Instance(FargateSpawnerAuthentication)
@@ -195,7 +195,7 @@ class FargateSpawner(Spawner):
     async def start(self):
         progress_buffer = self.progress_buffer
 
-        self.log.debug('Starting spawner with timeout {}'.format(self.start_timeout))
+        self.log.debug(f'Starting spawner for user {self.user.name} with timeout {self.start_timeout}')
 
         progress_buffer.write({'progress': 0.5, 'message': 'Starting server...'})
         try:
@@ -216,7 +216,7 @@ class FargateSpawner(Spawner):
         while task_ip == '':
             num_polls += 1
             if num_polls >= max_polls:
-                raise Exception('Task {} took too long to find IP address'.format(task_arn))
+                raise gen.TimeoutError('Task {} took too long to find IP address'.format(task_arn))
 
             task_ip = await _get_task_ip(self.log, self._aws_endpoint(), task_cluster_arn, task_arn)
             await gen.sleep(1)
@@ -226,7 +226,7 @@ class FargateSpawner(Spawner):
         while status != 'RUNNING':
             num_polls += 1
             if num_polls >= max_polls:
-                raise Exception('Task {} took too long to become running'.format(task_arn))
+                raise gen.TimeoutError('Task {} took too long to become running'.format(task_arn))
 
             status = await _get_task_status(self.log, self._aws_endpoint(), task_cluster_arn, task_arn)
             if status not in ALLOWED_STATUSES:
@@ -239,8 +239,11 @@ class FargateSpawner(Spawner):
         await gen.sleep(1)
 
         progress_buffer.close()
+        
+        server_url = f'{self.notebook_scheme}://{task_ip}:{self.notebook_port}'
+        self.log.debug(f"Started notebook for user {self.user.name} at url: {server_url}")
 
-        return f'{self.notebook_scheme}://{task_ip}:{self.notebook_port}'
+        return server_url
 
     async def stop(self, now=False):
         if self.task_arn == '':
